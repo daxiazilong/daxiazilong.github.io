@@ -36,11 +36,14 @@
 <script>
     let isMobile = /Android|webOS|iPhone|iPod|BlackBerry/i.test(navigator.userAgent);
     if(!isMobile){
-        confirm(`
+        if(confirm(`
             请务必使用移动端模式打开本项目
             Be sure to open this project in mobile mode
-        `);
-        location.reload();
+        `)){
+            location.reload();   
+        }else{
+            document.write('')
+        };
     }
 </script>
 <h2><a href="https://github.com/daxiazilong/image-preview">仓库地址<br>repository</a></h2>
