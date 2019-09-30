@@ -1,6 +1,6 @@
 /**
  * image-preview 1.0.0
- * author:zilong
+ * author:zilong 
  * https://github.com/daxiazilong
  * Released under the MIT License
  */
@@ -796,27 +796,11 @@ var ImagePreview = /** @class */ (function () {
             switch (Math.abs(rotateDeg % 360)) {
                 case 0:
                 case 180:
-                    {
-                        // biggest width for zoom in
-                        var maxWidth = this.screenWidth * 6;
-                        if (curItemWidth * (1 + this.zoomScale) > maxWidth) {
-                            this.isAnimating = false;
-                            return;
-                        }
-                        curItem.style.cssText += "\n                            width: " + curItemWidth * (1 + this.zoomScale) + "px;\n                            height: " + curItemHeihgt * (1 + this.zoomScale) + "px;\n                            top: " + curItem.dataset.top + "px;\n                            left: " + curItem.dataset.left + "px;\n                    ";
-                    }
+                    curItem.style.cssText += "\n                            width: " + curItemWidth * (1 + this.zoomScale) + "px;\n                            height: " + curItemHeihgt * (1 + this.zoomScale) + "px;\n                            top: " + curItem.dataset.top + "px;\n                            left: " + curItem.dataset.left + "px;\n                    ";
                     break;
                 case 90:
                 case 270:
-                    {
-                        // biggest width for zoom in
-                        var maxWidth = this.screenWidth * 6;
-                        if (curItemHeihgt * (1 + this.zoomScale) > maxWidth) {
-                            this.isAnimating = false;
-                            return;
-                        }
-                        curItem.style.cssText += "\n                            height: " + curItemWidth * (1 + this.zoomScale) + "px;\n                            width: " + curItemHeihgt * (1 + this.zoomScale) + "px;\n                            left: " + curItem.dataset.left + "px;\n                            top: " + curItem.dataset.top + "px;\n                    ";
-                    }
+                    curItem.style.cssText += "\n                            height: " + curItemWidth * (1 + this.zoomScale) + "px;\n                            width: " + curItemHeihgt * (1 + this.zoomScale) + "px;\n                            left: " + curItem.dataset.left + "px;\n                            top: " + curItem.dataset.top + "px;\n                    ";
                     break;
                 default:
                     break;
