@@ -23,6 +23,8 @@ var ImagePreview = /** @class */ (function () {
         this.defToggleClass = 'defToggleClass';
         this.movePoints = []; //收集移动点，判断滑动方向
         this.fingerDirection = ''; //当前手指得移动方向
+        this.moveStartTime = 0;
+        this.moveEndTime = 0;
         this.operateMaps = {
             rotateLeft: 'handleRotateLeft',
             rotateRight: 'handleRotateRight'
@@ -560,6 +562,10 @@ var ImagePreview = /** @class */ (function () {
         var isBoundaryLeft = curItem.dataset.toLeft == 'true';
         var isBoundaryRight = curItem.dataset.toRight == 'true';
         var direction = e.touches[0].clientX - this.startX > 0 ? 'right' : 'left';
+        var curItemViewLeft = curItem.getBoundingClientRect().left;
+        var curItemViewRight = curItem.getBoundingClientRect().right;
+        var imgContainerRect = this.imgContainer.getBoundingClientRect();
+        var conWidth = imgContainerRect.width;
         /* 收集一段时间之内得移动得点，用于获取当前手指得移动方向
          * 如果手指方向已经确定了 则按手指方向做出操作，否则 启动开始收集手指移动得点
          * 并启动一个计时器 一定时间之后处理移动方向
@@ -570,10 +576,6 @@ var ImagePreview = /** @class */ (function () {
                 // 放大的时候的移动是查看放大后的图片
                 // 放大的时候,如果到达边界还是进行正常的切屏操作
                 // 重置是否已到达边界的变量,如果容器内能容纳图片则不需要重置
-                var imgContainerRect = this.imgContainer.getBoundingClientRect();
-                var conWidth = imgContainerRect.width;
-                var curItemViewLeft = curItem.getBoundingClientRect().left;
-                var curItemViewRight = curItem.getBoundingClientRect().right;
                 // 对于长图单独处理，长图就是宽度可以容纳在当前容器内，但是高度很高的图片
                 if (curItemViewLeft >= 0 && curItemViewRight <= conWidth) {
                     if (((isBoundaryLeft && direction == 'right') ||
@@ -604,6 +606,19 @@ var ImagePreview = /** @class */ (function () {
             this.isMotionless = false;
         }
         else {
+            // 放大之后的非长图，以及非放大的图片，这里可以直接派发操作
+            if ((curItem.dataset.isEnlargement == 'enlargement' && curItemViewLeft < 0 && curItemViewRight > conWidth)
+                ||
+                    (curItem.dataset.isEnlargement !== 'enlargement')) {
+                if (curItem.dataset.isEnlargement == 'enlargement' && curItemViewLeft < 0 && curItemViewRight > conWidth) {
+                    this.handleMoveEnlage(e);
+                }
+                else if (curItem.dataset.isEnlargement !== 'enlargement') {
+                    this.handleMoveNormal(e);
+                }
+                this.isMotionless = false;
+                return;
+            }
             this.getMovePoints(e);
             if (this.performerRecordMove) {
                 return;
@@ -627,12 +642,12 @@ var ImagePreview = /** @class */ (function () {
                     // 放大的时候的移动是查看放大后的图片
                     // 放大的时候,如果到达边界还是进行正常的切屏操作
                     // 重置是否已到达边界的变量,如果容器内能容纳图片则不需要重置
-                    var imgContainerRect = _this.imgContainer.getBoundingClientRect();
-                    var conWidth = imgContainerRect.width;
-                    var curItemViewLeft = curItem.getBoundingClientRect().left;
-                    var curItemViewRight = curItem.getBoundingClientRect().right;
+                    var imgContainerRect_2 = _this.imgContainer.getBoundingClientRect();
+                    var conWidth_1 = imgContainerRect_2.width;
+                    var curItemViewLeft_1 = curItem.getBoundingClientRect().left;
+                    var curItemViewRight_1 = curItem.getBoundingClientRect().right;
                     // 对于长图单独处理，长图就是宽度可以容纳在当前容器内，但是高度很高的图片
-                    if (curItemViewLeft >= 0 && curItemViewRight <= conWidth) {
+                    if (curItemViewLeft_1 >= 0 && curItemViewRight_1 <= conWidth_1) {
                         if (((isBoundaryLeft && direction == 'right') ||
                             (isBoundaryRight && direction == 'left') ||
                             (_this.isEnlargeMove)) &&
@@ -676,6 +691,9 @@ var ImagePreview = /** @class */ (function () {
         this.imgContainer.style.left = this.imgContainerMoveX + "px";
     };
     ImagePreview.prototype.handleMoveEnlage = function (e) {
+        if (!this.moveStartTime) {
+            this.moveStartTime = (new Date).getTime();
+        }
         var imgContainerRect = this.imgContainer.getBoundingClientRect();
         var conWidth = imgContainerRect.width;
         var conHeight = imgContainerRect.height;
@@ -1049,7 +1067,27 @@ var ImagePreview = /** @class */ (function () {
             }
             curItem.dataset.toTop = 'false';
             curItem.dataset.toBottom = 'false';
+            this.moveEndTime = (new Date).getTime();
+            var endPoint = {
+                x: this.startX,
+                y: this.startY
+            };
+            var startPoint = {
+                x: this.touchStartX,
+                y: this.touchStartY
+            };
+            var dx = endPoint.x - startPoint.x;
+            var dy = endPoint.y - startPoint.y;
+            var degree = Math.atan2(dy, dx) * 180 / Math.PI;
+            var touchTime = this.moveEndTime - this.moveStartTime;
+            // 手指移动时间较短的时候，手指离开屏幕时，会滑动一段时间
+            // 上边确定的degree时以y轴上半轴 从0 - 180 变化，y轴下半轴从 0 - -180变化
+            if (touchTime < 90) {
+                var boundryObj = { maxTop: maxTop, minTop: minTop, maxLeft: maxLeft, minLeft: minLeft };
+                this.autoMove(curItem, degree, curItemLeft, curItemTop, boundryObj);
+            }
         }
+        this.moveStartTime = 0;
     };
     ImagePreview.prototype.handleTEndEnNormal = function (e) {
         var endX = Math.round(e.changedTouches[0].clientX);
@@ -1071,6 +1109,61 @@ var ImagePreview = /** @class */ (function () {
         }
         else { //复原
             this.slideSelf();
+        }
+    };
+    ImagePreview.prototype.autoMove = function (curItem, deg, startX, startY, _a) {
+        var maxTop = _a.maxTop, minTop = _a.minTop, maxLeft = _a.maxLeft, minLeft = _a.minLeft;
+        deg = (deg / 180) * Math.PI;
+        var distance = 500;
+        var offsetX = Math.round(distance * Math.cos(deg));
+        var offsetY = Math.round(distance * Math.sin(deg));
+        var endX = startX + offsetX;
+        var endY = startY + offsetY;
+        if (endX > maxLeft) {
+            endX = maxLeft;
+        }
+        else if (endX < minLeft) {
+            endX = minLeft;
+        }
+        if (endY > maxTop) {
+            endY = maxTop;
+        }
+        else if (endY < minTop) {
+            endY = minTop;
+        }
+        var stepX = this.computeStep(startX - endX, 300);
+        var stepY = this.computeStep(startY - endY, 300);
+        this.animateMultiValue(curItem, [
+            {
+                prop: 'left',
+                start: startX,
+                end: endX,
+                step: -stepX
+            }, {
+                prop: 'top',
+                start: startY,
+                end: endY,
+                step: -stepY
+            }
+        ]);
+        curItem.dataset.left = "" + endX;
+        curItem.dataset.top = "" + endY;
+        if (endX == maxLeft) {
+            //toLeft 即为到达左边界的意思下同
+            curItem.dataset.toLeft = 'true';
+            curItem.dataset.toRight = 'false';
+        }
+        else if (endX == minLeft) {
+            curItem.dataset.toLeft = 'false';
+            curItem.dataset.toRight = 'true';
+        }
+        if (endY == maxTop) {
+            curItem.dataset.toTop = 'true';
+            curItem.dataset.toBottom = 'false';
+        }
+        else if (endY == minTop) {
+            curItem.dataset.toTop = 'false';
+            curItem.dataset.toBottom = 'true';
         }
     };
     ImagePreview.prototype.slideNext = function () {
@@ -1161,9 +1254,6 @@ var ImagePreview = /** @class */ (function () {
             return;
         }
         this.isAnimating = true;
-        for (var i = 0, L = options.length; i < L; i++) {
-            var item = options[i];
-        }
         var processStyle = function () {
             var isFullFilled = true;
             for (var i = 0, L = options.length; i < L; i++) {
@@ -1196,7 +1286,7 @@ var ImagePreview = /** @class */ (function () {
         var curImg = this.options.curImg;
         var images = this.options.imgs;
         if (!images || !images.length) {
-            console.error("没图，玩你麻痹");
+            console.error("没有图片哦!\n no pictures!");
             return;
         }
         this.imgsNumber = images.length;
