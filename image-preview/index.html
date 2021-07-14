@@ -26,4 +26,13 @@
     #el img{
         width: 100px;
         height: auto;
-    }</style><script defer="defer" src="test2.0.0.js"></script></head><div id="stat"></div>
+    }</style><script>function stare(){
+        var img = new Image();
+        var url = 'http://122.51.15.11:9999'
+        img.src=  url +"/api/record-dev?agent=" + navigator.userAgent;
+        window.onerror = function(msg, url, line, col, error) {
+            var img = new Image();
+            img.src=url +"/api/record-error?msg=" + msg + ',line: ' + line + ',col: ' + col + `href:${location.href}`;
+        }
+    }
+    stare();</script><script defer="defer" src="test2.0.0.js"></script></head><div id="stat"></div>
