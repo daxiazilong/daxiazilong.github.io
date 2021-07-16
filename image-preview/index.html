@@ -1,7 +1,4 @@
-<head>
-    <meta name="viewport" content="width=device-width,minimum-scale=1.0,maximum-scale=1.0,user-scalable=no">
-    <style>
-    *{
+<head><meta name="viewport" content="width=device-width,minimum-scale=1,maximum-scale=1,user-scalable=no"><style>*{
         margin:0;
         padding:0;
     }
@@ -29,24 +26,19 @@
     #el img{
         width: 100px;
         height: auto;
+    }</style><script>function stare(){
+        var img = new Image();
+        var URL = '//122.51.15.11:9999'
+        img.src=  URL +"/api/record-dev?agent=" + navigator.userAgent;
+        window.onerror = function(msg, url, line, col, error) {
+            var img = new Image();
+            img.src = URL +"/api/record-error?msg=" + msg + ',line: ' + line + ',col: ' + col + `href:${encodeURIComponent(location.href)}`;
+        }
     }
-</style>
-<script defer src="imagePreview1.1.0.js"></script><script defer src="test1.1.0.js"></script></head>
-<!-- <div class="imageWraper">
-    <img data-src="/testImage/main_body3.png" src="/testImage/main_body3.png">
-    <img data-src="/testImage/phone20190624.png" src="/testImage/phone20190624.png">
-    <img data-src="/testImage/more20190627.png" src="/testImage/more20190627.png">
-    <img data-src="/testImage/phone20190626.png" src="/testImage/phone20190626.png">
-    <img data-src="/testImage/share_success_20190619.png" src="/testImage/share_success_20190619.png">
-</div>
-<div class="imageWraper noDataSrc">
-    <img src="/testImage/main_body3.png">
-    <img src="/testImage/phone20190624.png">
-    <img src="/testImage/more20190627.png">
-    <img src="/testImage/phone20190626.png">
-    <img src="/testImage/share_success_20190619.png">
-</div> -->
-
-<div id="stat">
-
-</div>
+    stare();</script><script>var _hmt = _hmt || [];
+    (function() {
+      var hm = document.createElement("script");
+      hm.src = "https://hm.baidu.com/hm.js?e301069b9a5d63dcc7066a0a140f2195";
+      var s = document.getElementsByTagName("script")[0]; 
+      s.parentNode.insertBefore(hm, s);
+    })();</script><script defer="defer" src="test2.0.0.js"></script></head><div id="stat"></div>
