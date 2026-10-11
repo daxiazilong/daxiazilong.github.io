@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Cartoon 帧系：CA→O 种子经叉积正交化</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #101725;
+    font-family: -apple-system, "PingFang SC", sans-serif; color: #dfe7f3; }
+  #app { position: fixed; inset: 0; }
+  .panel {
+    position: fixed; top: 16px; left: 16px; z-index: 10;
+    background: rgba(16, 23, 37, 0.85); border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 10px; padding: 14px 16px; backdrop-filter: blur(8px);
+    max-width: 320px; font-size: 13px; line-height: 1.7;
+  }
+  .panel h1 { font-size: 14px; margin: 0 0 6px; }
+  .panel .row { display: flex; gap: 8px; margin: 10px 0 4px; flex-wrap: wrap; }
+  .panel button {
+    padding: 5px 12px; font-size: 12px; cursor: pointer; color: #dfe7f3;
+    background: transparent; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px;
+  }
+  .panel button.active { background: #2b7a3f; border-color: #2b7a3f; }
+  .legend { display: flex; flex-direction: column; gap: 3px; margin-top: 8px; font-size: 12px; }
+  .legend i { display: inline-block; width: 22px; height: 3px; vertical-align: middle; margin-right: 8px; border-radius: 2px; }
+  .legend i.dash { background: repeating-linear-gradient(90deg,#ff5fb0 0 5px,transparent 5px 9px); }
+  .hint { position: fixed; bottom: 14px; left: 16px; font-size: 11px; color: #8a94a6; z-index: 10; max-width: 460px; line-height: 1.6; }
+  label.chk { display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; }
+  code { color: #ffd479; font-size: 11px; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="panel">
+  <h1>CA→O 种子 → 叉积正交化 → T/W/N</h1>
+  <div>同一公式，切换指数看截面形状：</div>
+  <div class="row">
+    <button id="btnFlat" class="active">e=6 扁带 (helix/sheet)</button>
+    <button id="btnCircle">e=1 圆管 (coil)</button>
+  </div>
+  <div class="row" style="flex-direction:column;gap:4px">
+    <label class="chk"><input type="checkbox" id="chkGuard" checked /> <b>防扭转保护（L231-234）</b></label>
+    <label class="chk"><input type="checkbox" id="chkRings" checked /> 显示截面环（黄）</label>
+    <label class="chk"><input type="checkbox" id="chkArrows" checked /> 显示 T/W/N 正交轴</label>
+    <label class="chk"><input type="checkbox" id="chkSeed" checked /> 显示 CA→O 种子向量（粉）</label>
+    <label class="chk"><input type="checkbox" id="chkRotate" checked /> 自动旋转</label>
+  </div>
+  <div class="legend">
+    <div><i class="dash"></i>CA→O：故意倾斜 20°，<b>不严格垂直</b> T</div>
+    <div><i style="background:#4caf6d"></i>T 切向（样条走向）</div>
+    <div><i style="background:#e8a13c"></i>N = <code>norm(T × wdir)</code> 严格垂直 T</div>
+    <div><i style="background:#5ba3ff"></i>W = <code>N × T</code> = wdir 去掉 T 分量后的方向</div>
+    <div><i style="background:#d93366"></i>飘带：超椭圆环沿 T 扫掠缝合</div>
+  </div>
+</div>
+<div class="hint">
+  粉色 CA→O 与绿色 T 明显不成 90°——真实肽键几何如此。白色虚线是 CA→O 里平行于 T 的分量，
+  叉积 <code>N=T×wdir</code> 把它扔掉；蓝球是 CA→O 投影到法平面的落点，蓝轴 W 正指向它。<br>
+  飘带中部红标处注入了一个 <b>wdir 退化窗口</b>（CA→O 插值翻转近 180°，模拟缺 O / 与 T 共线）：
+  关掉「防扭转保护」可看到该点表面拧成麻花、沿途蓝色 W 轴突然反向；打开则 L231-234 逐帧检测
+  <code>dot(W,prevW)&lt;0</code> 并把 W、N 同时取反，表面恢复连续。
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ---- 与 src/libs/cartoon/index.ts 相同的参数 ----
+const RING = 10;
+const HALF_W = 1.1, HALF_T = 0.25, COIL_R = 0.32;
+const SEED_TILT = THREE.MathUtils.degToRad(20); // 模拟 CA→O 与法平面的夹角（不严格垂直 T）
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(devicePixelRatio);
+document.getElementById('app').appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x101725);
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 100);
+camera.position.set(6, 4, 9);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 1.2;
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+const dl = new THREE.DirectionalLight(0xffffff, 1.2);
+dl.position.set(5, 8, 6);
+scene.add(dl);
+
+// 控制点：S 形 Catmull-Rom（模拟 Cα 点云）
+const curve = new THREE.CatmullRomCurve3([
+  new THREE.Vector3(-5, 0, 0),
+  new THREE.Vector3(-3, 1.5, 1),
+  new THREE.Vector3(-1, 0, -1.5),
+  new THREE.Vector3(1, -1.5, 1),
+  new THREE.Vector3(3, 0, -1),
+  new THREE.Vector3(5, 1.2, 0.5),
+]);
+
+scene.add(new THREE.Line(
+  new THREE.BufferGeometry().setFromPoints(curve.getPoints(200)),
+  new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 })
+));
+
+const ribbonMat = new THREE.MeshStandardMaterial({
+  color: 0xd93366, roughness: 0.4, metalness: 0.1,
+  transparent: true, opacity: 0.5, side: THREE.DoubleSide,
+});
+
+// ---- 平行传输构造连续的“物理朝向”基底 q（等价于防扭转后的 CA→O 投影方向）----
+// 真 CA→O 还会带一点 T 分量，这里故意倾斜 SEED_TILT 模拟
+const SAMPLES = 80;
+const DEGEN_CENTER = Math.round(0.5 * SAMPLES);
+const DEGEN_HALF = 2; // 退化窗口宽度（采样数）
+const frames = [];
+{
+  let q = null;
+  for (let i = 0; i <= SAMPLES; i++) {
+    const u = i / SAMPLES;
+    const T = curve.getTangentAt(u).normalize();
+    if (!q) {
+      q = Math.abs(T.x) < 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+      q.addScaledVector(T, -q.dot(T)).normalize();
+    } else {
+      // 把上一个 q 投影到当前 T 的法平面并归一化（rotation-minimizing，不翻转）
+      q.addScaledVector(T, -q.dot(T)).normalize();
+    }
+    // 模拟真实 CA→O：法平面分量 cos α + 切向分量 sin α —— 与 T 不垂直。
+    // 退化窗口内 α=160°：wdir 反向穿过 T（等价于两个近反向 CA→O 插值退化/缺 O 兜底），
+    // 独立叉积出的 N/W 在此整体翻转 180°
+    const degen = Math.abs(i - DEGEN_CENTER) <= DEGEN_HALF;
+    const tilt = degen ? THREE.MathUtils.degToRad(160) : SEED_TILT;
+    const wdir = q.clone().multiplyScalar(Math.cos(tilt))
+      .addScaledVector(T, Math.sin(tilt)).normalize();
+    frames.push({ center: curve.getPointAt(u), T, q: q.clone(), wdir, degen });
+  }
+}
+
+// 与 cartoon/index.ts L48-51 相同的兜底
+function anyPerpVec(v) {
+  const axis = Math.abs(v.x) < 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+  return new THREE.Vector3().crossVectors(v, axis).normalize();
+}
+
+// 逐帧独立正交化 + 可选的 L231-234 防扭转
+function buildFrameList(guard) {
+  let prevW = null;
+  return frames.map(f => {
+    let N = f.wdir ? new THREE.Vector3().crossVectors(f.T, f.wdir).normalize() : null;
+    if (!N || N.lengthSq() < 1e-12) N = anyPerpVec(f.T); // 对应 L228-229
+    let W = new THREE.Vector3().crossVectors(N, f.T).normalize(); // L230
+    if (guard && prevW && W.dot(prevW) < 0) { // L231-234
+      W.negate();
+      N.negate();
+    }
+    prevW = W.clone();
+    return { N, W };
+  });
+}
+
+// 超椭圆截面（与 cartoon/index.ts L244-249 完全一致）
+function superEllipsePoint(theta, exponent, w, t) {
+  const c = Math.cos(theta), s = Math.sin(theta);
+  const fx = exponent === 1 ? c : Math.sign(c) * Math.pow(Math.abs(c), 2 / exponent);
+  const fy = exponent === 1 ? s : Math.sign(s) * Math.pow(Math.abs(s), 2 / exponent);
+  return [w * fx, t * fy];
+}
+
+function ringPoints(i, exponent, fr) {
+  const f = frames[i];
+  const { N, W } = fr;
+  const w = exponent === 1 ? COIL_R : HALF_W;
+  const t = exponent === 1 ? COIL_R : HALF_T;
+  const pts = [];
+  for (let k = 0; k < RING; k++) {
+    const [fx, fy] = superEllipsePoint((k / RING) * Math.PI * 2, exponent, w, t);
+    pts.push(f.center.clone().addScaledVector(W, fx).addScaledVector(N, fy));
+  }
+  return { pts, center: f.center, T: f.T, N, W, wdir: f.wdir, q: f.q, degen: f.degen };
+}
+
+let ribbon = null;
+const ringGroup = new THREE.Group();
+const arrowGroup = new THREE.Group();
+const seedGroup = new THREE.Group();
+scene.add(ringGroup, arrowGroup, seedGroup);
+
+function makeLabel(text, color) {
+  const cv = document.createElement('canvas');
+  cv.width = 256; cv.height = 96;
+  const ctx = cv.getContext('2d');
+  ctx.font = 'bold 56px sans-serif';
+  ctx.fillStyle = '#' + color.toString(16).padStart(6, '0');
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(text, 128, 48);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: new THREE.CanvasTexture(cv), transparent: true, depthTest: false,
+  }));
+  sp.scale.set(0.75, 0.3, 1);
+  return sp;
+}
+
+function rebuild(exponent) {
+  if (ribbon) { ribbon.geometry.dispose(); scene.remove(ribbon); }
+  ringGroup.clear(); arrowGroup.clear(); seedGroup.clear();
+
+  const frList = buildFrameList(guardEnabled);
+
+  // 1) 扫掠飘带：相邻环 k 对 k 缝合（对应 L271-286）
+  const positions = [], indices = [];
+  const rings = [];
+  for (let i = 0; i <= SAMPLES; i++) {
+    const r = ringPoints(i, exponent, frList[i]);
+    rings.push(r);
+    for (const p of r.pts) positions.push(p.x, p.y, p.z);
+  }
+  for (let i = 0; i < SAMPLES; i++) {
+    for (let k = 0; k < RING; k++) {
+      const a = i * RING + k, b = i * RING + (k + 1) % RING;
+      const a2 = (i + 1) * RING + k, b2 = (i + 1) * RING + (k + 1) % RING;
+      indices.push(a, a2, b, b, a2, b2);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  ribbon = new THREE.Mesh(geo, ribbonMat);
+  scene.add(ribbon);
+
+  // 2) 黄色截面环
+  const ringMat = new THREE.LineBasicMaterial({ color: 0xe8c23c, transparent: true, opacity: 0.9 });
+  for (let i = 0; i <= SAMPLES; i += 8) {
+    const g = new THREE.BufferGeometry().setFromPoints(rings[i].pts.concat([rings[i].pts[0]]));
+    ringGroup.add(new THREE.Line(g, ringMat));
+  }
+
+  // 2.5) 每隔几环画一根短小 W 轴：翻转时这些蓝箭头会肉眼可见地集体掉头
+  for (let i = 0; i <= SAMPLES; i += 4) {
+    arrowGroup.add(new THREE.ArrowHelper(
+      rings[i].W.clone().normalize(), rings[i].center, 0.8,
+      rings[i].degen ? 0xff4444 : 0x5ba3ff, 0.2, 0.12));
+  }
+  // 退化窗口红标
+  const mark = new THREE.Mesh(
+    new THREE.SphereGeometry(0.16, 20, 20),
+    new THREE.MeshBasicMaterial({ color: 0xff4444 }));
+  mark.position.copy(frames[DEGEN_CENTER].center);
+  ringGroup.add(mark);
+  const lFlip = makeLabel('退化点 →', 0xff4444);
+  lFlip.position.copy(frames[DEGEN_CENTER].center).add(new THREE.Vector3(0, 1.1, 0));
+  lFlip.scale.set(1.6, 0.3, 1);
+  ringGroup.add(lFlip);
+
+  // 3) 高亮截面
+  const hi = rings[Math.round(0.72 * SAMPLES)];
+  const fan = [hi.center.clone(), ...hi.pts];
+  const fanIdx = [];
+  for (let k = 0; k < RING; k++) fanIdx.push(0, 1 + k, 1 + ((k + 1) % RING));
+  const fg = new THREE.BufferGeometry();
+  fg.setAttribute('position', new THREE.Float32BufferAttribute(fan.flatMap(p => [p.x, p.y, p.z]), 3));
+  fg.setIndex(fanIdx);
+  fg.computeVertexNormals();
+  ringGroup.add(new THREE.Mesh(fg,
+    new THREE.MeshBasicMaterial({ color: 0xe8c23c, transparent: true, opacity: 0.28, side: THREE.DoubleSide })));
+
+  // 4) T/W/N 正交轴
+  const arrow = (dir, color, len) =>
+    new THREE.ArrowHelper(dir.clone().normalize(), hi.center, len, color, len * 0.26, len * 0.15);
+  arrowGroup.add(arrow(hi.T, 0x4caf6d, 2.2));
+  arrowGroup.add(arrow(hi.N, 0xe8a13c, 1.5));
+  arrowGroup.add(arrow(hi.W, 0x5ba3ff, 1.9));
+  const lT = makeLabel('T', 0x4caf6d);
+  lT.position.copy(hi.center).addScaledVector(hi.T, 2.55);
+  const lN = makeLabel('N=T×wdir', 0xe8a13c);
+  lN.position.copy(hi.center).addScaledVector(hi.N, 1.85); lN.scale.set(1.7, 0.3, 1);
+  const lW = makeLabel('W=N×T', 0x5ba3ff);
+  lW.position.copy(hi.center).addScaledVector(hi.W, 2.25); lW.scale.set(1.5, 0.3, 1);
+  arrowGroup.add(lT, lN, lW);
+
+  // 5) CA→O 种子向量（粉）+ 被叉积扔掉的 T 分量（白虚线）+ 法平面投影球（蓝）
+  const seedLen = 2.6;
+  const seedArrow = new THREE.ArrowHelper(
+    hi.wdir.clone().normalize(), hi.center, seedLen, 0xff5fb0, 0.55, 0.32);
+  seedGroup.add(seedArrow);
+  const lSeed = makeLabel('CA→O (wdir)', 0xff5fb0);
+  lSeed.position.copy(hi.center).addScaledVector(hi.wdir, 3.0); lSeed.scale.set(2.0, 0.3, 1);
+  seedGroup.add(lSeed);
+
+  // wdir 端点
+  const tip = hi.center.clone().addScaledVector(hi.wdir, seedLen);
+  // 法平面投影点：tip 减去平行 T 的分量 → 应落在 W 方向上（W 本就是投影方向）
+  const proj = tip.clone().addScaledVector(hi.T, -tip.clone().sub(hi.center).dot(hi.T));
+  const projBall = new THREE.Mesh(
+    new THREE.SphereGeometry(0.09, 16, 16),
+    new THREE.MeshBasicMaterial({ color: 0x5ba3ff }));
+  projBall.position.copy(proj);
+  seedGroup.add(projBall);
+  // 虚线：tip → proj（被去掉的 T 分量）
+  const dashGeo = new THREE.BufferGeometry().setFromPoints([tip, proj]);
+  const dash = new THREE.Line(dashGeo, new THREE.LineDashedMaterial({
+    color: 0xffffff, dashSize: 0.12, gapSize: 0.08, transparent: true, opacity: 0.85,
+  }));
+  dash.computeLineDistances();
+  seedGroup.add(dash);
+}
+
+let currentExponent = 6;
+let guardEnabled = true;
+rebuild(currentExponent);
+
+document.getElementById('btnFlat').onclick = () => {
+  currentExponent = 6;
+  rebuild(6);
+  btnFlat.classList.add('active'); btnCircle.classList.remove('active');
+};
+document.getElementById('btnCircle').onclick = () => {
+  currentExponent = 1;
+  rebuild(1);
+  btnCircle.classList.add('active'); btnFlat.classList.remove('active');
+};
+document.getElementById('chkGuard').onchange = e => {
+  guardEnabled = e.target.checked;
+  rebuild(currentExponent);
+};
+document.getElementById('chkRings').onchange = e => ringGroup.visible = e.target.checked;
+document.getElementById('chkArrows').onchange = e => arrowGroup.visible = e.target.checked;
+document.getElementById('chkSeed').onchange = e => seedGroup.visible = e.target.checked;
+document.getElementById('chkRotate').onchange = e => controls.autoRotate = e.target.checked;
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+(function loop() {
+  requestAnimationFrame(loop);
+  controls.update();
+  renderer.render(scene, camera);
+})();
+</script>
+</body>
+</html>

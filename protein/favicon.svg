@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <rect width="64" height="64" rx="14" fill="#101725"/>
+  <!-- 双股交错正弦带：模拟 cartoon α螺旋外观 -->
+  <path d="M12 40 Q18 16 24 40 T36 40 T48 40" stroke="#7dd3a8" stroke-width="5" stroke-linecap="round" fill="none"/>
+  <path d="M12 24 Q18 48 24 24 T36 24 T48 24" stroke="#4a9d7a" stroke-width="5" stroke-linecap="round" fill="none"/>
+</svg>
